@@ -1,0 +1,6 @@
+REM A simple demo that prints hello world
+
+STRING echo hello 
+DELAY 3000
+STRING world
+ENTER

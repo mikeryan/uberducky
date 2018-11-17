@@ -12,6 +12,7 @@
 *.map
 *.srec
 *.sym
+script.c
 
 # Source code indexing files.
 tags
