@@ -1,0 +1,29 @@
+*.o
+*.pyc
+
+# firmware build output
+*.bin
+*.d
+*.dfu
+*.elf
+*.hex
+*.lss
+*.lst
+*.map
+*.srec
+*.sym
+
+# Source code indexing files.
+tags
+tags.log
+TAGS
+TAGS.log
+cscope*
+ID
+
+# Editor junk
+*.swp
+*.sublime-project
+*.sublime-workspace
+.vscode
+
