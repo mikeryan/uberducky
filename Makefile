@@ -5,6 +5,7 @@ TARGET = uberducky
 
 # List C source files here. (C dependencies are automatically generated.)
 SRC = $(TARGET).c \
+	ble.c \
 	hid.c \
 	script.c \
 	usb.c \

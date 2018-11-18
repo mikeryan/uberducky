@@ -6,6 +6,8 @@
  */
 
 #include "hid.h"
+#include "ble.h"
+
 #include "type.h"
 #include "ubertooth.h"
 #include "usbapi.h"
@@ -211,12 +213,20 @@ void TIMER0_IRQHandler(void) {
             }
         }
     }
+
+    // LEDs
+    if (T0IR & TIR_MR1_Interrupt) {
+        T0IR = TIR_MR1_Interrupt;
+        RXLED_CLR;
+    }
 }
 
 // from usb.c
 void usb_init(void);
 
 int main() {
+    uint8_t ble_packet[BLE_PACKET_SIZE];
+
     ubertooth_init();
 
     timer0_start();
@@ -225,10 +235,19 @@ int main() {
     timer0_set_match(NOW + 2000);
 
     usb_init();
+    ble_init();
 
     // call USB interrupt handler continuously
     while (1) {
         USBHwISR();
+
+        // fetch BLE packets
+        if (ble_get_packet(ble_packet)) {
+            // blink LED - TODO something more interesting
+            RXLED_SET;
+            T0MR1 = NOW + 10;
+            T0MCR |= TMCR_MR1I;
+        }
     }
 
     return 0;
