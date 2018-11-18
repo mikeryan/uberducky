@@ -14,6 +14,14 @@
 
 #include <string.h>
 
+// magic string that must be present in trigger packets
+// derived from random UUID:
+// fd123ff9-9e30-45b2-af0d-b85b7d2dc80c
+uint8_t ble_magic[16] = {
+    0x0c, 0xc8, 0x2d, 0x7d, 0x5b, 0xb8, 0x0d, 0xaf,
+    0xb2, 0x45, 0x30, 0x9e, 0xf9, 0x3f, 0x12, 0xfd,
+};
+
 extern uint8_t script[]; // auto-generated from duckyscript input
 
 #define INTR_IN_EP      0x81
@@ -221,6 +229,16 @@ void TIMER0_IRQHandler(void) {
     }
 }
 
+int magic_present(uint8_t *packet) {
+    unsigned i;
+
+    for (i = 0; i < BLE_PACKET_SIZE - 16; ++i)
+        if (memcmp(packet + i, ble_magic, 16) == 0)
+            return 1;
+
+    return 0;
+}
+
 // from usb.c
 void usb_init(void);
 
@@ -230,9 +248,6 @@ int main() {
     ubertooth_init();
 
     timer0_start();
-
-    script_state = ST_READY;
-    timer0_set_match(NOW + 2000);
 
     usb_init();
     ble_init();
@@ -247,6 +262,12 @@ int main() {
             RXLED_SET;
             T0MR1 = NOW + 10;
             T0MCR |= TMCR_MR1I;
+
+            // launch script if magic string is in packet and we're idle
+            if (script_state == ST_IDLE && magic_present(ble_packet)) {
+                script_state = ST_READY;
+                timer0_set_match(NOW + 1);
+            }
         }
     }
 
