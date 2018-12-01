@@ -22,6 +22,14 @@ uint8_t ble_magic[16] = {
     0xb2, 0x45, 0x30, 0x9e, 0xf9, 0x3f, 0x12, 0xfd,
 };
 
+// magic string that triggers bootloader mode
+// random UUID:
+// 344bc7f2-5619-4953-9be8-9888fe29d996
+uint8_t bootloader_magic[16] = {
+    0x96, 0xd9, 0x29, 0xfe, 0x88, 0x98, 0xe8, 0x9b,
+    0x53, 0x49, 0x19, 0x56, 0xf2, 0xc7, 0x4b, 0x34,
+};
+
 extern uint8_t script[]; // auto-generated from duckyscript input
 
 // times in ms
@@ -233,11 +241,11 @@ void TIMER0_IRQHandler(void) {
     }
 }
 
-int magic_present(uint8_t *packet) {
+int magic_present(uint8_t *packet, uint8_t *magic) {
     unsigned i;
 
     for (i = 0; i < BLE_PACKET_SIZE - 16; ++i)
-        if (memcmp(packet + i, ble_magic, 16) == 0)
+        if (memcmp(packet + i, magic, 16) == 0)
             return 1;
 
     return 0;
@@ -270,9 +278,24 @@ int main() {
             T0MCR |= TMCR_MR1I;
 
             // launch script if magic string is in packet and we're idle
-            if (script_state == ST_IDLE && magic_present(ble_packet)) {
+            if (script_state == ST_IDLE && magic_present(ble_packet, ble_magic)) {
                 script_state = ST_READY;
                 timer0_set_match(NOW + 1);
+            }
+
+            // if the bootloader magic is present, reset to bootloader
+            else if (magic_present(ble_packet, bootloader_magic)) {
+                // turn off radio
+                cc2400_strobe(SRFOFF);
+                while ((cc2400_status() & FS_LOCK)); // need to wait for unlock?
+#ifdef UBERTOOTH_ONE
+                PAEN_CLR;
+                HGM_CLR;
+#endif
+
+                // reset
+                bootloader_ctrl = DFU_MODE;
+                reset();
             }
         }
 
