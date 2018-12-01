@@ -24,6 +24,10 @@ uint8_t ble_magic[16] = {
 
 extern uint8_t script[]; // auto-generated from duckyscript input
 
+// times in ms
+#define LED_PERIOD      600
+#define LED_ON_TIME     100
+
 #define INTR_IN_EP      0x81
 
 #define LE_WORD(x)      ((x)&0xFF),((x)>>8)
@@ -244,6 +248,8 @@ void usb_init(void);
 
 int main() {
     uint8_t ble_packet[BLE_PACKET_SIZE];
+    int led_state = 0;
+    uint32_t led_next_event = LED_PERIOD - LED_ON_TIME;
 
     ubertooth_init();
 
@@ -267,6 +273,19 @@ int main() {
             if (script_state == ST_IDLE && magic_present(ble_packet)) {
                 script_state = ST_READY;
                 timer0_set_match(NOW + 1);
+            }
+        }
+
+        // blink LED
+        if (NOW >= led_next_event) {
+            if (led_state == 0) {
+                led_state = 1;
+                TXLED_SET;
+                led_next_event += LED_ON_TIME;
+            } else {
+                led_state = 0;
+                TXLED_CLR;
+                led_next_event += LED_PERIOD - LED_ON_TIME;
             }
         }
     }
