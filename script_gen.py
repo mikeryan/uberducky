@@ -15,47 +15,93 @@ import sys
 keywords = set((
     'rem', 'gui', 'string', 'enter',
     'default_delay', 'defaultdelay',
-    'delay', 'windows', 'menu', 'app',
+    'delay', 'windows', 'command', 'menu', 'app',
     'shift', 'alt', 'control', 'ctrl',
+    'leftarrow', 'left', 'rightarrow', 'right',
+    'uparrow', 'up', 'downarrow', 'down',
+    'tab', 'esc', 'escape', 'backspace', 'back',
+    'space', 'repeat', 'printscreen',
+    'f1', 'f2', 'f3', 'f4', 'f5', 'f6',
+    'f7', 'f8', 'f9', 'f10', 'f11', 'f12',
 ))
 
 canonical = {
     'gui': 'windows',
+    'command': 'windows',
     'defaultdelay': 'default_delay',
     'app': 'menu',
     'ctrl': 'control',
+    'leftarrow': 'left',
+    'rightarrow': 'right',
+    'uparrow': 'up',
+    'downarrow': 'down',
 }
 
 mods = {
-    'ctrl': 1,
+    'control': 1,
     'shift': 2,
     'alt': 4,
     'windows': 8,
 }
 
+special = {
+    'enter': 1,
+    'tab': 2,
+    'esc': 3,
+    'back': 4,
+}
+
+raw = {
+    None: 0x00,
+    'menu': 0x76,
+    'printscreen': 0x46,
+}
+
 # convert arguments into canonical form
-# returns None if there is a problem with the arg
+# raises Exception if there is a problem with the arg
 def clean_arg(arg):
     if arg is None or len(arg) == 0:
-        return None
+        raise Exception('Empty argument')
     if len(arg) == 1:
-        return arg
+        return { 'type': 'chr', 'value': arg }
 
     arg = arg.lower()
-    if arg == 'enter':
-        return arg
+    arg = canonical.get(arg, arg)
     if arg == 'space':
-        return ' '
+        return { 'type': 'chr', 'value': ' ' }
+    if arg == 'enter':
+        return { 'type': 'special', 'value': 'enter' };
+    if arg == 'tab':
+        return { 'type': 'special', 'value': 'tab' }
+    if arg == 'esc' or arg == 'escape':
+        return { 'type': 'special', 'value': 'esc' }
+    if arg == 'backspace' or arg == 'back':
+        return { 'type': 'special', 'value': 'back' }
+    if arg == 'menu':
+        return { 'type': 'raw', 'value': 'menu' }
+    if arg == 'printscreen':
+        return { 'type': 'raw', 'value': 'printscreen' }
+    if arg == 'right':
+        return { 'type': 'arrow', 'value': 0 }
+    if arg == 'left':
+        return { 'type': 'arrow', 'value': 1 }
+    if arg == 'down':
+        return { 'type': 'arrow', 'value': 2 }
+    if arg == 'up':
+        return { 'type': 'arrow', 'value': 3 }
     if len(arg) > 1:
+        # f keys
         if arg[0] == 'f':
             try:
                 num = int(arg[1:])
-                if num >= 1 and num <= 12:
-                    return arg
+                if num < 1 or num > 12:
+                    raise Exception()
             except:
-                pass
+                raise Exception('Invalid f-key "%s"' % arg)
 
-    return None
+            return { 'type': 'fkey', 'value': num }
+
+    raise Exception('Invalid argument "%s"' % arg)
 
 # loads a script from a file and returns a list of tuples of (cmd, arg)
 def load_script(file):
@@ -77,31 +123,45 @@ def load_script(file):
     for cmd, arg in parsed_script:
         if cmd == '':
             continue
-        if cmd not in keywords:
-            print "Error: unknown command '%s', ignoring" % cmd
+
+        # multiple modifiers
+        if '-' in cmd:
+            rawparts = cmd.split('-')
+            parts = []
+            for p in rawparts:
+                if p in keywords:
+                    m = canonical.get(p, p)
+                    if m not in mods:
+                        raise Exception("Invalid mod '%s'" % p)
+                    parts.append(m)
+            arg = clean_arg(arg)
+            arg['mods'] = parts
+            script.append(arg)
             continue
-        canon = canonical.get(cmd)
-        if canon is not None:
-            cmd = canon
+
+        cmd = canonical.get(cmd, cmd)
+        if cmd not in keywords:
+            raise Exception("Unknown command '%s'" % cmd)
+
+        # modifier key with a normal key argument
+        if cmd in mods:
+            try:
+                arg = clean_arg(arg)
+            except:
+                # special case: modifier with no argument
+                arg = { 'type': 'raw', 'value': None }
+            arg['mods'] = [cmd]
+            script.append(arg)
+            continue
 
         # comments
         if cmd == 'rem':
             pass
 
-        # command followed by argument
-        elif cmd in ('windows', 'menu', 'alt', 'control', 'shift'):
-            arg = clean_arg(arg)
-            if arg is not None:
-                script.append((cmd, arg))
-
         # string of characters
         elif cmd == 'string':
             if len(arg) > 0:
-                script.append((cmd, arg))
-
-        # enter key
-        elif cmd == 'enter':
-            script.append((cmd, None))
+                script.append({ 'type': 'string', 'value': arg })
 
         # default delay
         elif cmd == 'default_delay':
@@ -115,26 +175,50 @@ def load_script(file):
                 arg = default_delay
             else:
                 arg = int(arg)
-            script.append((cmd, arg))
+            script.append({ 'type': 'delay', 'value': arg })
+
+        elif cmd == 'repeat':
+            count = 1
+            if arg is not None:
+                count = int(arg)
+            script.append({ 'type': 'repeat', 'value': count })
+
+        else:
+            script.append(clean_arg(cmd))
 
     return script
 
 def ducky_to_bin(parsed):
     script = []
-    for cmd, arg in s:
-        if cmd == 'delay':
-            script.append(struct.pack('<BH', 2, arg))
-        elif cmd in mods:
-            mod = mods[cmd]
-            script.append(struct.pack('BBBc', 1, 0, mod, arg))
-        elif cmd == 'enter':
-            script.append(struct.pack('BBBB', 1, 1, 0, 0))
-        elif cmd == 'string':
-            l = len(arg)
+    for cmd in s:
+        type, value = cmd['type'], cmd['value']
+
+        mod = 0
+        for m in cmd.get('mods', []):
+            mod |= mods[m]
+
+        if type == 'delay':
+            script.append(struct.pack('<BH', 2, value))
+        elif type == 'chr':
+            script.append(struct.pack('BBBc', 1, 0, mod, value))
+        elif type == 'special':
+            script.append(struct.pack('BBBB', 1, special[value], mod, 0))
+        elif type == 'fkey':
+            script.append(struct.pack('BBBB', 1, 5, mod, 0x3a + value-1))
+        elif type == 'arrow':
+            script.append(struct.pack('BBBB', 1, 5, mod, 0x4f + value))
+        elif type == 'printscreen':
+            script.append(struct.pack('BBBB', 1, 5, mod, 0x46))
+        elif type == 'raw':
+            script.append(struct.pack('BBBB', 1, 5, mod, raw[value]))
+        elif type == 'string':
+            l = len(value)
             script.append(struct.pack('<BH', 3, l))
-            script.append(arg)
+            script.append(value)
+        elif type == 'repeat':
+            script.append(struct.pack('<BH', 4, value))
         else:
-            print "not handled %s" % type
+            raise Exception("Unhandled command '%s'" % cmd[0])
 
     binary_script = ''.join(script)
     l = struct.pack('<H', len(binary_script))
