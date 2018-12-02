@@ -19,6 +19,8 @@
 #define K_TAB   2
 #define K_ESC   3
 #define K_BACK  4
+#define K_RAW   5
+
 // modifiers
 #define M_NONE  0
 #define M_CTRL  1
@@ -28,7 +30,7 @@
 typedef struct _keystroke_t {
     int type;
     int mod;
-    char chr;
+    uint8_t chr;
 } keystroke_t;
 
 void hid_encode(keystroke_t *s, uint8_t *r);

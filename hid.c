@@ -99,6 +99,9 @@ void hid_encode(keystroke_t *s, uint8_t *r) {
         case K_BACK:
             r[2] = 0x2A;
             break;
+        case K_RAW:
+            r[2] = s->chr;
+            break;
     }
     r[0] = mod;
 }
