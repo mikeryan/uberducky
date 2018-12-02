@@ -67,6 +67,10 @@ unsigned script_pos = 0;
 unsigned string_len = 0;
 unsigned string_pos = 0;
 
+uint32_t repeat_counter = 0;
+unsigned repeat_pos = 0;
+int repeating = 0;
+
 // opcodes
 //
 // encoding: <op> [<arg> .. ]
@@ -75,10 +79,12 @@ unsigned string_pos = 0;
 // KEY - key type, modifier, character (each 1 byte)
 // DELAY - delay in ms (16 bit little endian)
 // STRING - length (16 bit little endian), chars
+// REPEAT - repeat previous command
 #define OP_NOP    0
 #define OP_KEY    1
 #define OP_DELAY  2
 #define OP_STRING 3
+#define OP_REPEAT 4
 
 #define DELAY(X) OP_DELAY, LE_WORD(X)
 
@@ -144,7 +150,21 @@ void TIMER0_IRQHandler(void) {
                         script_state = ST_IDLE;
                         return;
                     }
+
+                    if (repeating) {
+                        if (repeat_counter == 0) {
+                            repeating = 0;
+                            script_pos += 3; // skip repeat opcode
+                        } else {
+                            --repeat_counter;
+                            script_pos = repeat_pos; // jump back to prev op
+                        }
+                    }
+
                     opcode = script[script_pos++];
+                    if (opcode != OP_REPEAT)
+                        repeat_pos = script_pos-1;
+
                     switch (opcode) {
                         case OP_NOP:
                             ++script_pos;
@@ -179,6 +199,12 @@ void TIMER0_IRQHandler(void) {
                             script_pos += 2;
                             run_state = R_STRING;
                             string_state = S_IDLE;
+                            timer0_set_match(NOW + 1); // re-enter in 1 ms
+                            return;
+
+                        case OP_REPEAT:
+                            repeating = 1;
+                            repeat_counter = READ_LE(script_pos);
                             timer0_set_match(NOW + 1); // re-enter in 1 ms
                             return;
                     }
